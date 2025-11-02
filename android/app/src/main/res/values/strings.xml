@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">tas_app</string>
+    <!-- Google Maps API 키를 그대로 넣기 -->
+    <string name="google_maps_api_key">AIzaSyDgSThN1sHSyB4JZM9Z24qIFsslfFX5Qt4</string>
+
+
+</resources>
