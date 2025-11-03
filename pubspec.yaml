@@ -64,10 +64,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/rain_trace.csv
-    - assets/rain_trace_test.csv
     - assets/snow_trace.csv
-    - assets/model_rain.csv
-    - assets/model_snow.csv
     - assets/icons/car.png
     - assets/icons/rain.png
     - assets/icons/snow.png

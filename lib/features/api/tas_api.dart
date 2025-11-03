@@ -1,109 +1,142 @@
-// lib/features/api/tas_api.dart
+/* api/tas_api.dart */
+import 'dart:io';
 import 'dart:convert';
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:http/http.dart' as http;
-import 'tas_status.dart';
+import 'dart:async';
+import 'dart:isolate';
+import 'package:http_parser/http_parser.dart';
 
-/// TAS 백엔드 GET API 클라이언트
-/// - 엔드포인트: GET /api/v1/current_status
-/// - 쿼리: session_id, spd, latitude, longitude
-class TasApi {
-  final String baseHost; // 예: '10.0.2.2' (안드 에뮬), 'localhost' (iOS 시뮬/웹/데스크탑)
-  final int port;
-  final http.Client _client;
+// =========================================================================
+// 모델
+// =========================================================================
+class TasStatus {
+  final double spd;       // (현재 속도 - API에서 받아옴)
+  final double maxSpd;
+  final double rec;
+  final int warn;
+  final double latitude;  // ⬅️ 추가: 실시간 위도
+  final double longitude; // ⬅️ 추가: 실시간 경도
 
-  TasApi({
-    String? baseHost,
-    int this.port = 8000,
-    http.Client? client,
-  })  : baseHost = baseHost ?? _resolveDefaultHost(),
-        _client = client ?? http.Client();
+  TasStatus({
+    required this.spd,
+    required this.maxSpd,
+    required this.rec,
+    required this.warn,
+    required this.latitude,
+    required this.longitude,
+  });
 
-  /// 플랫폼에 따라 기본 호스트 자동 판별
-  static String _resolveDefaultHost() {
-    if (kIsWeb) return 'localhost';
-    try {
-      if (Platform.isAndroid) return '10.0.2.2'; // Android 에뮬레이터 -> 호스트
-      // iOS 시뮬 / 데스크탑 / 기타
-      return 'localhost';
-    } catch (_) {
-      return 'localhost';
-    }
-  }
-
-  Uri _buildUri(String path, Map<String, String> query) {
-    return Uri(
-      scheme: 'http',
-      host: baseHost,
-      port: port,
-      path: path,
-      queryParameters: query,
+  factory TasStatus.fromJson(Map<String, dynamic> json) {
+    return TasStatus(
+      spd: (json['spd'] as num).toDouble(),
+      maxSpd: (json['max_spd'] as num).toDouble(),
+      rec: (json['rec'] as num).toDouble(),
+      warn: json['warn'] as int,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
     );
   }
+}
 
-  Future<String> getSessionId({
-    required String localVideoPath,
-    required String serverModelPath, // 서버 모델 경로 (예: 'data/models/cnn_best.pth')
-  }) async {
-    // 1. URL 생성 (baseHost/port 사용)
-    final uri = _buildUri('/api/v1/start_video_session', {}); // POST는 쿼리 없이
+// =========================================================================
+// Isolate를 이용한 대용량 JSON 파싱 (백그라운드 스레드에서 실행)
+// =========================================================================
+Future<dynamic> _parseLargeJson(String responseBody) {
+  return Isolate.run(() => jsonDecode(responseBody));
+}
 
-    // 2. MultipartRequest 생성 (http.Client 대신 독립적으로 request.send() 사용)
-    var request = http.MultipartRequest('POST', uri)
-      ..fields['model_path'] = serverModelPath
-      ..fields['img_size'] = '224'
-      ..fields['interval_sec'] = '1.0';
+// =========================================================================
+// TAS API 클라이언트
+// =========================================================================
+class TasApi {
+  final String baseHost;
+  final HttpClient _httpClient;
 
-    // 3. 로컬 비디오 파일 첨부
-    try {
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'video_file',
-          localVideoPath,
-        ),
-      );
-    } catch (e) {
-      throw Exception('로컬 비디오 파일 접근 실패: $e');
-    }
+  TasApi({required this.baseHost})
+      : _httpClient = HttpClient();
 
-    // 4. 요청 전송 및 응답 처리
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
-
-    if (response.statusCode == 200) {
-      final data = json.decode(utf8.decode(response.bodyBytes));
-      final sessionId = data['session_id'] as String;
-      print('✅ 세션 ID 발급 성공 (Host: $baseHost:$port): $sessionId');
-      return sessionId;
-    } else {
-      print('❌ 세션 발급 실패 (Status: ${response.statusCode}): ${response.body}');
-      throw Exception('Failed to start video session');
-    }
+  void close() {
+    _httpClient.close(force: true);
   }
 
-  /// GET /api/v1/current_status
-  /// 반환 JSON에서 필요한 6개(+decel_class 옵션)만 모델로 매핑
+  // 세션 시작 (비디오 업로드)
+  Future<String> getSessionId({
+    required String localVideoPath,
+    required String serverModelPath,
+  }) async {
+    final uri = Uri.parse('http://$baseHost/api/session/start');
+
+    final request = await _httpClient.postUrl(uri);
+    final boundary = '----TasBoundary${DateTime.now().millisecondsSinceEpoch}';
+    request.headers.contentType = ContentType.parse('multipart/form-data; boundary=$boundary');
+
+    final file = File(localVideoPath);
+    if (!await file.exists()) {
+      throw Exception("Video file not found at $localVideoPath");
+    }
+
+    // 데이터 쓰기 (openWrite 대신 request 자체를 IOSink처럼 사용)
+    request.write('--$boundary\r\n');
+    request.write('Content-Disposition: form-data; name="model_path"\r\n\r\n');
+    request.write('$serverModelPath\r\n');
+
+    request.write('--$boundary\r\n');
+    request.write('Content-Disposition: form-data; name="video"; filename="${file.path.split('/').last}"\r\n');
+    request.write('Content-Type: ${MediaType('video', 'mp4')}\r\n\r\n');
+
+    await request.addStream(file.openRead());
+
+    request.write('\r\n--$boundary--\r\n');
+
+    final response = await request.close();
+
+    if (response.statusCode != 200) {
+      final errorBody = await response.transform(utf8.decoder).join();
+      throw Exception('Failed to start session: ${response.statusCode} - $errorBody');
+    }
+
+    final responseBody = await response.transform(utf8.decoder).join();
+    final json = await _parseLargeJson(responseBody);
+
+    if (json is Map<String, dynamic> && json.containsKey('session_id')) {
+      return json['session_id'] as String;
+    }
+    throw Exception('Invalid session ID response format');
+  }
+
+  // 실시간 상태 업데이트 (폴링)
   Future<TasStatus> fetchCurrentStatus({
     required String sessionId,
     required double spd,
     required double latitude,
     required double longitude,
   }) async {
-    final uri = _buildUri('/api/v1/current_status', {
+    final queryParams = {
       'session_id': sessionId,
-      'spd': spd.toString(),
+      'spd': spd.toStringAsFixed(2),
       'latitude': latitude.toString(),
       'longitude': longitude.toString(),
-    });
+    };
+    final uri = Uri.parse('http://$baseHost/api/status').replace(queryParameters: queryParams);
 
-    final res = await _client.get(uri);
-    if (res.statusCode != 200) {
-      throw Exception('API ${res.statusCode}: ${res.body}');
+    final request = await _httpClient.getUrl(uri);
+    final response = await request.close();
+
+    if (response.statusCode != 200) {
+      final errorBody = await response.transform(utf8.decoder).join();
+      throw Exception('Failed to fetch status: ${response.statusCode} - $errorBody');
     }
-    final map = jsonDecode(res.body) as Map<String, dynamic>;
-    return TasStatus.fromJson(map);
+
+    final responseBody = await response.transform(utf8.decoder).join();
+    final json = await _parseLargeJson(responseBody);
+
+    return TasStatus.fromJson(json as Map<String, dynamic>);
   }
 
-  void close() => _client.close();
+  // 세션 종료
+  Future<void> stopVideoSession({required String sessionId}) async {
+    final uri = Uri.parse('http://$baseHost/api/session/stop?session_id=$sessionId');
+
+    final request = await _httpClient.getUrl(uri);
+    await request.close();
+  }
 }

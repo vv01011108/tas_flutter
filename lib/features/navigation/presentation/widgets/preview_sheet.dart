@@ -3,7 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../domain/trace_models.dart';
-import '../../../shared/geo.dart';
+// 🗑️ import '../../../shared/geo.dart'; 삭제
+import '../../../shared/geo.dart'; // boundsFrom 사용을 위해 geo.dart의 다른 import 경로 유지
+import '../widgets/start_end_card.dart';
 
 typedef OnStartPressed = Future<void> Function();
 
@@ -20,93 +22,113 @@ class PreviewSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tr = trace;
-    final poly = Polyline(
-      polylineId: const PolylineId('csv'),
-      points: tr.pts,
-      width: 5,
-      color: Colors.blueAccent,
-    );
-    final markers = <Marker>{
-      Marker(markerId: const MarkerId('s'),
-          position: tr.start,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed)),
-      Marker(markerId: const MarkerId('e'),
-          position: tr.end,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed)),
-    };
-
     return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.45,
+      initialChildSize: 0.65,
+      minChildSize: 0.5,
       maxChildSize: 0.9,
-      builder: (_, controller) {
+      expand: false,
+      builder: (BuildContext context, ScrollController scrollController) {
         return Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Column(
-              children: [
-                Container(width: 40, height: 4,
-                    decoration: BoxDecoration(color: Colors.black26,
-                        borderRadius: BorderRadius.circular(2))),
-                const SizedBox(height: 12),
-                Text(title, style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: GoogleMap(
-                      initialCameraPosition:
-                      CameraPosition(target: tr.start, zoom: 15),
-                      markers: markers,
-                      polylines: {poly},
-                      compassEnabled: false,
-                      rotateGesturesEnabled: false,
-                      tiltGesturesEnabled: false,
-                      zoomControlsEnabled: false,
-                      onMapCreated: (c) async {
-                        try {
-                          await Future.delayed(const Duration(milliseconds: 250));
-                          await c.animateCamera(
-                            CameraUpdate.newLatLngBounds(boundsFrom(tr.pts), 48),
-                          );
-                        } catch (_) {}
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          // 이미 미리보기 상태라 별도 동작 불필요. 필요시 상세정보 토글 등 배치.
-                          Navigator.of(context).maybePop();
-                        },
-                        label: const Text('닫기'),
+          child: Column(
+            children: [
+              _buildHandle(context),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      // 지도를 포함한 카드 (onTap 없음, 힌트 없음)
+                      StartEndCard(
+                        startAddr: '출발 지점',
+                        start: LatLngLite(trace.start.latitude, trace.start.longitude),
+                        endAddr: '도착 지점',
+                        end: LatLngLite(trace.end.latitude, trace.end.longitude),
+                        showTapHint: false,
+                        onTap: null, // 미리보기에서는 탭 비활성화
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 250,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: GoogleMap(
+                            initialCameraPosition: CameraPosition(target: trace.pts.first, zoom: 16),
+                            onMapCreated: (controller) {
+                              final bounds = boundsFrom(trace.pts);
+                              controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+                            },
+                            markers: {
+                              Marker(
+                                markerId: const MarkerId('start'),
+                                position: trace.start,
+                                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                              ),
+                              Marker(
+                                markerId: const MarkerId('end'),
+                                position: trace.end,
+                                icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                              ),
+                            },
+                            polylines: {
+                              Polyline(
+                                polylineId: const PolylineId('route'),
+                                points: trace.pts,
+                                color: Colors.blueAccent,
+                                width: 6,
+                              )
+                            },
+                            zoomControlsEnabled: false,
+                            scrollGesturesEnabled: false,
+                            zoomGesturesEnabled: false,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
                         onPressed: onStart,
                         icon: const Icon(Icons.play_arrow),
                         label: const Text('안내 시작'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(50),
+                          backgroundColor: Colors.blueAccent,
+                          foregroundColor: Colors.white,
+                          textStyle: const TextStyle(fontSize: 18),
+                        ),
                       ),
-                    ),
-                  ],
-                )
-              ],
-            ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildHandle(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      width: double.infinity,
+      alignment: Alignment.center,
+      child: Container(
+        width: 40,
+        height: 5,
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
     );
   }
 }

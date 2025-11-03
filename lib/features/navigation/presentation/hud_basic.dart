@@ -1,5 +1,7 @@
 /* 속도/시간 HUD 위젯 */
 import 'package:flutter/material.dart';
+// LatLngLite를 start_end_card.dart에서 가져옵니다.
+import '../../navigation/presentation/widgets/start_end_card.dart';
 
 /// 공용 HUD 박스(네 원본 스타일)
 Widget hudBox({required Widget child}) {
@@ -43,21 +45,19 @@ class SpeedHud extends StatelessWidget {
 
 /// 좌표 + 주행시간을 함께 보여주는 HUD (좌하단 배치용)
 class CoordTimeHud extends StatelessWidget {
-  final double? lat;
-  final double? lng;
+  final LatLngLite? pos; // LatLngLite 사용
   final String elapsed; // "mm:ss" 형태를 넘겨주세요.
 
   const CoordTimeHud({
     super.key,
-    required this.lat,
-    required this.lng,
+    required this.pos,
     required this.elapsed,
   });
 
   @override
   Widget build(BuildContext context) {
-    final latStr = lat == null ? '—' : lat!.toStringAsFixed(6);
-    final lngStr = lng == null ? '—' : lng!.toStringAsFixed(6);
+    final latStr = pos == null ? '—' : pos!.latitude.toStringAsFixed(6);
+    final lngStr = pos == null ? '—' : pos!.longitude.toStringAsFixed(6);
 
     return hudBox(
       child: Row(

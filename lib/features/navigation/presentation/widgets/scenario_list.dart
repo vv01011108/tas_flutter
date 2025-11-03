@@ -2,8 +2,8 @@
 // features/navigation/presentation/widgets/scenario_list.dart
 import 'package:flutter/material.dart';
 import '../../domain/trace_models.dart';
-import '../../../shared/geo.dart';
-import '../widgets/start_end_card.dart';
+// 🗑️ import '../../../shared/geo.dart'; 삭제
+import '../widgets/start_end_card.dart'; // LatLngLite 포함
 
 
 class ScenarioListCard extends StatelessWidget {

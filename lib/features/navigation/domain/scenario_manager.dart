@@ -1,8 +1,6 @@
-/* 분기/모델 로드 */
+/* features/navigation/domain/scenario_manager.dart */
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../alerts/data/model_repo.dart';
 import '../../alerts/domain/alert_engine.dart';
-import '../../alerts/domain/alert_models.dart';
 import '../../navigation/data/trace_repo.dart';
 import '../../navigation/domain/trace_models.dart';
 import '../../shared/config.dart';
@@ -29,10 +27,6 @@ class ScenarioManager {
       ? AppConfig.kTraceCsvRain!
       : AppConfig.kTraceCsvSnow!;
 
-  String modelFor(DriveScenario s) => s == DriveScenario.rain
-      ? AppConfig.kModelCsvRain
-      : AppConfig.kModelCsvSnow;
-
   Future<void> preload(DriveScenario s,
       Future<String?> Function(LatLng) krAddr) async {
     final csv = csvFor(s);
@@ -42,16 +36,10 @@ class ScenarioManager {
     final slot = scenarios[s]!;
     slot.trace = tr;
 
-    String? norm(String? v) => v == null ? null : KrAddressService.normalizeKo(v);
+    // String? norm(String? v) => v == null ? null : KrAddressService.normalizeKo(v); // 🗑️ 사용하지 않으므로 제거
 
     slot.startAddrKr = start ?? tr.startAddr;
     slot.endAddrKr = end ?? tr.endAddr;
     slot.loading = false;
-  }
-
-  Future<AlertEngine> loadEngine(DriveScenario s) async {
-    final modelCsv = modelFor(s);
-    final nodes = await ModelRepo().loadFromCsv(modelCsv);
-    return AlertEngine(nodes);
   }
 }
