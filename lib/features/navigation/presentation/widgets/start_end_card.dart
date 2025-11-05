@@ -16,7 +16,7 @@ class StartEndCard extends StatelessWidget {
   /// ✅ 추가: 카드를 탭했을 때 실행할 콜백 (미리보기 열기 등)
   final VoidCallback? onTap;
 
-  /// ✅ 추가(옵션): 하단에 "탭하여 미리보기" 힌트를 보일지
+  /// ✅ 추가(옵션): 하단에 "탭하여 미리보기"
   final bool showTapHint;
 
   const StartEndCard({

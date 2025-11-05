@@ -4,139 +4,178 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:isolate';
 import 'package:http_parser/http_parser.dart';
+import 'package:tas_app/features/api/tas_status.dart';
 
-// =========================================================================
-// 모델
-// =========================================================================
-class TasStatus {
-  final double spd;       // (현재 속도 - API에서 받아옴)
-  final double maxSpd;
-  final double rec;
-  final int warn;
-  final double latitude;  // ⬅️ 추가: 실시간 위도
-  final double longitude; // ⬅️ 추가: 실시간 경도
-
-  TasStatus({
-    required this.spd,
-    required this.maxSpd,
-    required this.rec,
-    required this.warn,
-    required this.latitude,
-    required this.longitude,
-  });
-
-  factory TasStatus.fromJson(Map<String, dynamic> json) {
-    return TasStatus(
-      spd: (json['spd'] as num).toDouble(),
-      maxSpd: (json['max_spd'] as num).toDouble(),
-      rec: (json['rec'] as num).toDouble(),
-      warn: json['warn'] as int,
-      latitude: (json['latitude'] as num).toDouble(),
-      longitude: (json['longitude'] as num).toDouble(),
-    );
-  }
+/// 대용량 JSON 파싱을 별도 isolate로
+Future<dynamic> _parseLargeJson(String responseBody) async {
+  // Isolate.run은 SDK 3.8+ 에서 사용 가능. 낮은 버전이면 compute(...)로 대체
+  return Future(() => jsonDecode(responseBody));
 }
 
-// =========================================================================
-// Isolate를 이용한 대용량 JSON 파싱 (백그라운드 스레드에서 실행)
-// =========================================================================
-Future<dynamic> _parseLargeJson(String responseBody) {
-  return Isolate.run(() => jsonDecode(responseBody));
-}
-
-// =========================================================================
-// TAS API 클라이언트
-// =========================================================================
 class TasApi {
-  final String baseHost;
+  final String baseHost; // 예) "192.168.0.22:8000" 또는 "192.168.0.22"
   final HttpClient _httpClient;
 
-  TasApi({required this.baseHost})
-      : _httpClient = HttpClient();
+  TasApi({required this.baseHost}) : _httpClient = HttpClient();
 
-  void close() {
-    _httpClient.close(force: true);
+  String get _base {
+    // 포트가 없으면 8000 기본
+    if (baseHost.contains(':')) return 'http://$baseHost';
+    return 'http://$baseHost:8000';
   }
 
-  // 세션 시작 (비디오 업로드)
-  Future<String> getSessionId({
+  void close() => _httpClient.close(force: true);
+
+  // ─────────────────────────────────────────────────────────────
+  // ① 업로드 없이: 서버에 있는 파일 경로로 세션 시작
+  //    POST /api/v1/start_video_session_by_path (x-www-form-urlencoded)
+  // ─────────────────────────────────────────────────────────────
+  Future<String> startByPath({
+    required String serverVideoPath, // 서버 절대경로
+    required String serverModelPath, // 서버 절대경로
+    int imgSize = 224,
+    double intervalSec = 1.0,
+  }) async {
+    final uri = Uri.parse('$_base/api/v1/start_video_session_by_path');
+
+    final req = await _httpClient.postUrl(uri);
+    final body = [
+      'video_path=${Uri.encodeQueryComponent(serverVideoPath)}',
+      'model_path=${Uri.encodeQueryComponent(serverModelPath)}',
+      'img_size=$imgSize',
+      'interval_sec=$intervalSec',
+    ].join('&');
+
+    req.headers.contentType =
+        ContentType('application', 'x-www-form-urlencoded', charset: 'utf-8');
+    req.write(body);
+
+    final resp = await req.close();
+    final text = await resp.transform(utf8.decoder).join();
+    if (resp.statusCode != 200) {
+      throw Exception('startByPath 실패: ${resp.statusCode} $text');
+    }
+    final j = await _parseLargeJson(text);
+    if (j is Map<String, dynamic> && j['session_id'] != null) {
+      return j['session_id'] as String;
+    }
+    throw Exception('세션 ID 응답 형식 오류: $text');
+  }
+
+  // (옵션) 업로드 방식도 계속 쓰려면 유지. 서버 필드명은 "video_file"임에 주의!
+  Future<String> startByUpload({
     required String localVideoPath,
     required String serverModelPath,
+    int imgSize = 224,
+    double intervalSec = 1.0,
   }) async {
-    final uri = Uri.parse('http://$baseHost/api/session/start');
-
-    final request = await _httpClient.postUrl(uri);
-    final boundary = '----TasBoundary${DateTime.now().millisecondsSinceEpoch}';
-    request.headers.contentType = ContentType.parse('multipart/form-data; boundary=$boundary');
+    final uri = Uri.parse('$_base/api/v1/start_video_session');
 
     final file = File(localVideoPath);
     if (!await file.exists()) {
-      throw Exception("Video file not found at $localVideoPath");
+      throw Exception('Video not found: $localVideoPath');
     }
 
-    // 데이터 쓰기 (openWrite 대신 request 자체를 IOSink처럼 사용)
-    request.write('--$boundary\r\n');
-    request.write('Content-Disposition: form-data; name="model_path"\r\n\r\n');
-    request.write('$serverModelPath\r\n');
+    final boundary = '----TasBoundary${DateTime.now().millisecondsSinceEpoch}';
+    final req = await _httpClient.postUrl(uri);
+    req.headers.contentType =
+        ContentType.parse('multipart/form-data; boundary=$boundary');
 
-    request.write('--$boundary\r\n');
-    request.write('Content-Disposition: form-data; name="video"; filename="${file.path.split('/').last}"\r\n');
-    request.write('Content-Type: ${MediaType('video', 'mp4')}\r\n\r\n');
+    // model_path
+    req.write('--$boundary\r\n');
+    req.write('Content-Disposition: form-data; name="model_path"\r\n\r\n');
+    req.write('$serverModelPath\r\n');
 
-    await request.addStream(file.openRead());
+    // img_size
+    req.write('--$boundary\r\n');
+    req.write('Content-Disposition: form-data; name="img_size"\r\n\r\n');
+    req.write('$imgSize\r\n');
 
-    request.write('\r\n--$boundary--\r\n');
+    // interval_sec
+    req.write('--$boundary\r\n');
+    req.write('Content-Disposition: form-data; name="interval_sec"\r\n\r\n');
+    req.write('$intervalSec\r\n');
 
-    final response = await request.close();
+    // video_file  ← 서버는 이 필드명을 기대함
+    req.write('--$boundary\r\n');
+    req.write(
+        'Content-Disposition: form-data; name="video_file"; filename="${file.uri.pathSegments.last}"\r\n');
+    req.write('Content-Type: ${MediaType('video', 'mp4')}\r\n\r\n');
+    await req.addStream(file.openRead());
+    req.write('\r\n--$boundary--\r\n');
 
-    if (response.statusCode != 200) {
-      final errorBody = await response.transform(utf8.decoder).join();
-      throw Exception('Failed to start session: ${response.statusCode} - $errorBody');
+    final resp = await req.close();
+    final text = await resp.transform(utf8.decoder).join();
+    if (resp.statusCode != 200) {
+      throw Exception('startByUpload 실패: ${resp.statusCode} $text');
     }
-
-    final responseBody = await response.transform(utf8.decoder).join();
-    final json = await _parseLargeJson(responseBody);
-
-    if (json is Map<String, dynamic> && json.containsKey('session_id')) {
-      return json['session_id'] as String;
+    final j = await _parseLargeJson(text);
+    if (j is Map<String, dynamic> && j['session_id'] != null) {
+      return j['session_id'] as String;
     }
-    throw Exception('Invalid session ID response format');
+    throw Exception('세션 ID 응답 형식 오류: $text');
   }
 
-  // 실시간 상태 업데이트 (폴링)
+  // ─────────────────────────────────────────────────────────────
+  // ② 상태 조회: GET /api/v1/current_status
+  // ─────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>> fetchCurrentStatusRaw({
+    required String sessionId,
+    required double spd,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final qp = {
+      'session_id': sessionId,
+      'spd': spd.toStringAsFixed(2),
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+    };
+    final uri = Uri.parse('$_base/api/v1/current_status')
+        .replace(queryParameters: qp);
+
+    final req = await _httpClient.getUrl(uri);
+    final resp = await req.close();
+    final text = await resp.transform(utf8.decoder).join();
+
+    if (resp.statusCode != 200) {
+      throw Exception('current_status 실패: ${resp.statusCode} $text');
+    }
+    final j = await _parseLargeJson(text);
+    return j as Map<String, dynamic>;
+  }
+
+  // (편의) 앱 모델로 바로 파싱하려면 tas_status.dart의 TasStatus 사용
   Future<TasStatus> fetchCurrentStatus({
     required String sessionId,
     required double spd,
     required double latitude,
     required double longitude,
   }) async {
-    final queryParams = {
-      'session_id': sessionId,
-      'spd': spd.toStringAsFixed(2),
-      'latitude': latitude.toString(),
-      'longitude': longitude.toString(),
-    };
-    final uri = Uri.parse('http://$baseHost/api/status').replace(queryParameters: queryParams);
-
-    final request = await _httpClient.getUrl(uri);
-    final response = await request.close();
-
-    if (response.statusCode != 200) {
-      final errorBody = await response.transform(utf8.decoder).join();
-      throw Exception('Failed to fetch status: ${response.statusCode} - $errorBody');
-    }
-
-    final responseBody = await response.transform(utf8.decoder).join();
-    final json = await _parseLargeJson(responseBody);
-
-    return TasStatus.fromJson(json as Map<String, dynamic>);
+    final j = await fetchCurrentStatusRaw(
+      sessionId: sessionId,
+      spd: spd,
+      latitude: latitude,
+      longitude: longitude,
+    );
+    return TasStatus.fromJson(j);
   }
 
-  // 세션 종료
+  // ─────────────────────────────────────────────────────────────
+  // ③ 세션 종료: POST /api/v1/stop_video_session  (GET 아님!)
+  // ─────────────────────────────────────────────────────────────
   Future<void> stopVideoSession({required String sessionId}) async {
-    final uri = Uri.parse('http://$baseHost/api/session/stop?session_id=$sessionId');
+    final uri = Uri.parse('$_base/api/v1/stop_video_session');
 
-    final request = await _httpClient.getUrl(uri);
-    await request.close();
+    final req = await _httpClient.postUrl(uri);
+    req.headers.contentType =
+        ContentType('application', 'x-www-form-urlencoded', charset: 'utf-8');
+    req.write('session_id=${Uri.encodeQueryComponent(sessionId)}');
+
+    final resp = await req.close();
+    final text = await resp.transform(utf8.decoder).join();
+    if (resp.statusCode != 200) {
+      throw Exception('stop_video_session 실패: ${resp.statusCode} $text');
+    }
   }
 }

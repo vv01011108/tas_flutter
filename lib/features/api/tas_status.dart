@@ -1,11 +1,11 @@
-// lib/features/api/tas_status.dart
 class TasStatus {
-  final double spd;        // 현재 속도 (km/h)
-  final double latitude;   // 위도
-  final double longitude;  // 경도
-  final double maxSpd;     // 제한 속도 (km/h)
-  final double rec;        // 추천 속도 (km/h)
-  final int warn;          // 0=정상, 1=감속 경고
+  final double spd;
+  final double latitude;
+  final double longitude;
+  final double maxSpd;
+  final double rec;
+  final int warn;
+  final int? decelClass;
 
   TasStatus({
     required this.spd,
@@ -14,10 +14,10 @@ class TasStatus {
     required this.maxSpd,
     required this.rec,
     required this.warn,
+    this.decelClass,
   });
 
   factory TasStatus.fromJson(Map<String, dynamic> j) {
-    // 서버는 snake_case로 내려옴 (max_spd)
     double _toD(dynamic v) => (v as num).toDouble();
     return TasStatus(
       spd: _toD(j['spd']),
@@ -26,6 +26,7 @@ class TasStatus {
       maxSpd: _toD(j['max_spd']),
       rec: _toD(j['rec']),
       warn: j['warn'] as int,
+      decelClass: j['decel_class'] == null ? null : (j['decel_class'] as num).toInt(),
     );
   }
 }
