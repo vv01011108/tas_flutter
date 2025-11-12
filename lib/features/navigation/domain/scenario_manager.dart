@@ -70,7 +70,9 @@ class ScenarioManager {
 
   // ---------------------- 아래부터 private 메서드들 ----------------------
 
-  Future<String?> _safeAddr(Future<String?> Function(LatLng) krAddr, LatLng p) async {
+  Future<String?> _safeAddr(
+      Future<String?> Function(LatLng) krAddr, LatLng p
+      ) async {
     try {
       return await krAddr(p).timeout(const Duration(seconds: 5));
     } catch (_) {
@@ -78,10 +80,6 @@ class ScenarioManager {
     }
   }
 
-  /// CSV -> TraceData
-  /// - 헤더 지원: latitude/lat, longitude/lon/lng
-  /// - 시간 컬럼: datetime_kst, datetime, timestamp, time/t/sec (없으면 1초 간격으로 생성)
-  /// - 속도 컬럼: spd/speed_kmh/kmh (없으면 하버사인+Δt로 계산)
   TraceData _parseCsvToTrace(String csvText) {
     // BOM 제거 + 라인 정리
     final cleaned = csvText.replaceAll('\ufeff', '');

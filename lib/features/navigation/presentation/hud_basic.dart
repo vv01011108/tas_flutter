@@ -27,18 +27,42 @@ class SpeedHud extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return hudBox(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.speed, size: 18, color: Colors.white),
-          const SizedBox(width: 6),
-          Text(
-            '${kmh.toStringAsFixed(1)} km/h',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
+
+    const double fontSize = 40.0;
+    const FontWeight fontWeight = FontWeight.w900;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack( // 테두리와 채우기를 위해 Stack으로 감싸 두 개의 Text를 겹칩니다.
+          alignment: Alignment.center,
+          children: [
+            // 1. 아래 텍스트: 테두리(Stroke) 역할
+            Text(
+              '${kmh.toInt()}',
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+                // 테두리 스타일 정의 (빨간색)
+                foreground: Paint()
+                  ..style = PaintingStyle.stroke // 스타일을 '테두리'로 설정
+                  ..strokeWidth = 6.0           // 테두리 두께 (2.0에서 4.0으로 늘려 테두리가 더 잘 보이게 했습니다.)
+                  ..color = Colors.white,         // 테두리 색상
+              ),
+            ),
+
+            // 2. 위 텍스트: 채우기(Fill) 역할
+            Text(
+              '${kmh.toInt()}',
+              style: const TextStyle(
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+                color: Colors.black,           // 글자 내부 채우기 색상 (흰색으로 설정)
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

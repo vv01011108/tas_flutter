@@ -39,8 +39,8 @@ class AlertBanner extends StatelessWidget {
 
     // 테두리/아이콘 색상
     final bool danger = severity == 2;
-    final Color borderColor = danger ? Colors.red : Colors.orange;
-    final Color iconColor   = borderColor;
+    final Color borderColor = danger ? Colors.red : Colors.deepOrangeAccent;
+    // final Color iconColor   = borderColor;
 
     return AnimatedSlide(
       duration: const Duration(milliseconds: 250),
@@ -59,29 +59,55 @@ class AlertBanner extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                
+                // 경고판 안 텍스트 위치 조정
+                const SizedBox(height: 80),
                 Icon(
                   danger ? Icons.dangerous : Icons.warning_amber_rounded,
                   size: 44,
-                  color: iconColor,
+                  color: borderColor,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  tasTitle!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.black,
-                  ),
+                const SizedBox(height: 8),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+
+                    // 1. 아래 텍스트: 인위적으로 굵기를 더하는 Stroke 역할
+                    Text(
+                      tasTitle!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+
+                        // 검은색 테두리/스트로크를 아주 얇게 적용하여 굵기를 보강
+                        foreground: Paint()
+                          ..style = PaintingStyle.stroke
+                          ..strokeWidth = 0.9 // 굵기 보강용 얇은 스트로크 (원하는 값으로 조절)
+                          ..color = Colors.black,
+                      ),
+                    ),
+
+                    // 2. 위 텍스트: 내부 채우기 역할 (w900 굵기 유지)
+                    Text(
+                      tasTitle!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ],
                 ),
                 if (tasSub != null) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                   Text(
                     tasSub!,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w900,
                       color: Colors.black87,
                     ),
                   ),
@@ -112,7 +138,7 @@ class _RoundedTriangleSign extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color signColor = flashOn ? Colors.white : Colors.amber.shade50;
+    final Color signColor = flashOn ? Colors.white : Colors.amber.shade200;
     return CustomPaint(
       painter: _RoundedTrianglePainter(
         color: signColor,
@@ -122,8 +148,9 @@ class _RoundedTriangleSign extends StatelessWidget {
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(
-          horizontal: 20 + borderWidth,
-          vertical: 24 + borderWidth / 2,
+          // 경고판 패딩
+          horizontal: 24 + borderWidth,
+          vertical: 20 + borderWidth / 2,
         ),
         child: child,
       ),
@@ -149,9 +176,33 @@ class _RoundedTrianglePainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    final top   = Offset(w / 2, 0);
-    final left  = Offset(0, h);
-    final right = Offset(w, h);
+    // 1. 삼각형의 높이를 고정 (예: 캔버스 높이 전체를 사용한다고 가정)
+    final triangleHeight = h;
+
+    // 2. 이동시킬 거리를 정의
+    final offset_y = 60.0; // 원하는 만큼 아래로 이동 (50.0 예시)
+
+    // 3. 꼭짓점 좌표를 재정의
+    // - top: (캔버스 중앙) + offset_y
+    final top   = Offset(w / 2, 0 + offset_y);
+
+    // - left/right: (top.y + 고정된 삼각형 높이)로 계산하여 높이를 유지
+    final bottom_y = -60 + triangleHeight + offset_y;
+
+    final left  = Offset(0, bottom_y);
+    final right = Offset(w, bottom_y);
+
+    // 하지만, 이 값이 캔버스 높이(h)를 넘으면 안 됨
+    // 캔버스 안에서 삼각형 크기를 줄여야 함 (예시: 삼각형 높이를 캔버스 높이의 80%로 가정)
+
+    // final fixedTriangleHeight = h * 0.8; // 삼각형 높이를 캔버스 높이의 80%로 고정
+    // final top_y = 0 + offset_y;
+    // final bottom_y_fixed = top_y + fixedTriangleHeight;
+    //
+    // // 최종 수정된 좌표
+    // final final_top = Offset(w / 2, top_y);
+    // final final_left = Offset(0, bottom_y_fixed);
+    // final final_right = Offset(w, bottom_y_fixed);
 
     final path = Path()
       ..moveTo(top.dx, top.dy)

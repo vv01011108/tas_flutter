@@ -2,7 +2,6 @@
 // features/navigation/presentation/widgets/scenario_list.dart
 import 'package:flutter/material.dart';
 import '../../domain/trace_models.dart';
-// 🗑️ import '../../../shared/geo.dart'; 삭제
 import '../widgets/start_end_card.dart'; // LatLngLite 포함
 
 
@@ -52,9 +51,9 @@ class ScenarioListCard extends StatelessWidget {
 class _Loading extends StatelessWidget {
   const _Loading();
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) => const Column(
     crossAxisAlignment: CrossAxisAlignment.start,
-    children: const [
+    children: [
       SizedBox(height: 4),
       LinearProgressIndicator(minHeight: 6),
       SizedBox(height: 6),

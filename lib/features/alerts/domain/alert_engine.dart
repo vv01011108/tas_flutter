@@ -1,6 +1,5 @@
 /* alerts/domain/alert_engine.dart (최종 수정) */
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:flutter/material.dart'; // Circle을 위해 필요 (만약 사용한다면)
 
 // 🔑 [유일 정의]: AlertNode와 RoadSurface는 이 파일에서만 정의됩니다.
 enum RoadSurface { dry, wet, icy }
