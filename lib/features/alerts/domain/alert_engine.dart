@@ -1,7 +1,7 @@
 /* alerts/domain/alert_engine.dart (최종 수정) */
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-// 🔑 [유일 정의]: AlertNode와 RoadSurface는 이 파일에서만 정의됩니다.
+// AlertNode와 RoadSurface는 이 파일에서만 정의됨
 enum RoadSurface { dry, wet, icy }
 
 class AlertNode {
@@ -18,7 +18,7 @@ class AlertState {
   final bool visible;
   final Set<Circle> circles;
   final int firstEnterPlayMs;
-  final int lastSeenPlayMs; // 사용하지 않을 수 있으나 구조 유지를 위해 포함
+  final int lastSeenPlayMs;
 
   const AlertState({
     required this.current,
@@ -74,7 +74,6 @@ class AlertEngine {
     _state = _state.copyWith(
       current: tempAlert,
       visible: true,
-      // circles 업데이트 로직...
     );
   }
 

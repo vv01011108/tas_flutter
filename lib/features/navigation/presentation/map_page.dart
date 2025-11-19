@@ -35,17 +35,22 @@ class ScenarioFiles {
   const ScenarioFiles(this.xlsxPath, this.videoPath, this.modelPath);
 }
 
-// 시나리오별 매핑 (실제 경로로 수정하세요)
+// 시나리오별 매핑 (실제 경로로 수정)
 const Map<DriveScenario, ScenarioFiles> _filesByScenario = {
+  DriveScenario.sunny: ScenarioFiles(
+    'data/csv/250418video1_data.xlsx',
+    'data/videos/2209youtube_video1.mp4',
+    'data/models/BEST_convnext_tiny_scenarioC_seed4.pth',
+  ),
   DriveScenario.rain: ScenarioFiles(
-    r'C:\Users\seonga\Desktop\TAS_251101\api\data\csv\240716video5_data.xlsx',
-    r'C:\Users\seonga\Desktop\TAS_251101\api\data\videos\240716_video5.mp4',
-    r'C:\Users\seonga\Desktop\TAS_251101\api\data\models\cnn_mobilenet_v3_small_ensemble_calibrated.pth',
+    'data/csv/240716video5_data.xlsx',
+    'data/videos/240716_video5.mp4',
+    'data/models/BEST_convnext_tiny_scenarioC_seed4.pth',
   ),
   DriveScenario.snow: ScenarioFiles(
-    r'C:\Users\seonga\Desktop\TAS_251101\api\data\csv\250212video2_data.xlsx',
-    r'C:\Users\seonga\Desktop\TAS_251101\api\data\videos\250212_video2.mp4',
-    r'C:\Users\seonga\Desktop\TAS_251101\api\data\models\cnn_mobilenet_v3_small_ensemble_calibrated.pth',
+    'data/csv/250212video2_data.xlsx',
+    'data/videos/250212_video2.mp4',
+    'data/models/BEST_convnext_tiny_scenarioC_seed4.pth',
   ),
 };
 
@@ -65,6 +70,10 @@ class _MapPageState extends State<MapPage> {
   double _currentKmh = 0.0;
   String _elapsedTime = '00:00';
   DateTime? _startTime;
+  double? _totalKm; // 전체 경로 길이 (csv 기반)
+  double? _remainingKm; // 남은 거리
+
+  double? _hudMaxSpd; // 제한 속도 HUD용
 
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
@@ -73,6 +82,7 @@ class _MapPageState extends State<MapPage> {
 
   bool _booting = true;
   bool _running = false;
+  bool _followCar = true;
 
   // TAS 배너 상태(표시 전담)
   int? _tasSeverity;  // 1=주의, 2=위험, null=비표시
@@ -81,11 +91,6 @@ class _MapPageState extends State<MapPage> {
 
   // 경고가 처음 발생한 시점 (밀리초 단위)
   int _alertEnterTimeMs = 0;
-
-  // HUD(간단 수치) — SSE tick에서 갱신
-  double? _hudMaxSpd;
-  double? _hudRec;
-  int? _hudDecelClass;
 
   // SSE
   late TasSseClient _sse;
@@ -97,7 +102,7 @@ class _MapPageState extends State<MapPage> {
     _initAll();
   }
 
-  Future<String?> _dummyAddress(LatLng pos) async => null;
+  // Future<String?> _dummyAddress(LatLng pos) async => null;
 
   Future<void> _initAll() async {
     // 차량 아이콘
@@ -110,22 +115,30 @@ class _MapPageState extends State<MapPage> {
       _carIcon = null;
     }
 
-    // 시나리오 프리로드(비동기, 실패해도 앱 진행)
+    // 2. 시나리오 프리로드 (모든 Future를 리스트에 담아 대기)
+    final List<Future<void>> preloadTasks = [];
+
     for (final s in _mgr.scenarios.keys) {
-      () async {
+      // Future를 리스트에 추가
+      preloadTasks.add(() async {
         try {
-          // 진짜 주소 함수 넘기기
           await _mgr.preload(s, (p) => KrAddressService.krRoadAddress(p))
               .timeout(const Duration(seconds: 15));
         } catch (e) {
           debugPrint('preload 실패($s): $e');
-        } finally {
-          if (mounted) setState(() {});
         }
-      }();
+        // 모든 작업이 끝난 후 한 번만 호출합니다.
+      }());
     }
 
-    if (mounted) setState(() => _booting = false);
+    // 3. 모든 프리로드 작업이 완료되기를 기다림 (하나라도 끝나면 다음 줄로 넘어감)
+    await Future.wait(preloadTasks.map((e) => e.catchError((_) {}))); // 에러가 나도 진행되도록 처리
+
+    if (mounted) {
+      await Future.delayed(Duration.zero); // 다음 프레임까지 대기하여 비동기 작업이 시작될 시간을 줌
+      setState(() => _booting = false);
+      debugPrint('Booting complete. Moving to scenario selection.');
+    }
   }
 
   // ─────────────────────────────────────────────────────────
@@ -153,6 +166,43 @@ class _MapPageState extends State<MapPage> {
     return R * c;
   }
 
+  // 전체 경로 길이 (CSV pts 기반)
+  double _computeRouteLengthKm(List<LatLng> pts) {
+    double total = 0;
+    for (int i = 0; i < pts.length - 1; i++) {
+      total += _haversineKm(pts[i], pts[i + 1]);
+    }
+    return total;
+  }
+
+  // 현재 위치와 가장 가까운 경로 인덱스
+  int _findNearestIndex(List<LatLng> pts, LatLng pos) {
+    double bestDist = double.infinity;
+    int bestIdx = 0;
+
+    for (int i = 0; i < pts.length; i++) {
+      final d = _haversineKm(pts[i], pos);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  }
+
+  // 현재 위치 기준 남은 거리 (경로를 따라 합산)
+  double _computeRemainingKm(List<LatLng> pts, LatLng current) {
+    if (pts.length < 2) return 0.0;
+
+    final idx = _findNearestIndex(pts, current);
+    double remain = 0;
+
+    for (int i = idx; i < pts.length - 1; i++) {
+      remain += _haversineKm(pts[i], pts[i + 1]);
+    }
+    return remain;
+  }
+
   String _formatDuration(Duration d) {
     final min = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final sec = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -175,10 +225,15 @@ class _MapPageState extends State<MapPage> {
   }
 
   double _lastBearing = 0.0;
+  int _lastAppCameraMoveMs = 0;
 
   Future<void> _applyNavCamera(LatLng pos, double bearing) async {
+
     if (!_mapReadyOk) return;
+    if (!_followCar) return;
+
     _lastBearing = bearing;
+    _lastAppCameraMoveMs = DateTime.now().millisecondsSinceEpoch;
 
     await _map.animateCamera(
       CameraUpdate.newCameraPosition(
@@ -217,13 +272,16 @@ class _MapPageState extends State<MapPage> {
     _tasTitle = null;
     _tasSub = null;
     _hudMaxSpd = null;
-    _hudRec = null;
-    _hudDecelClass = null;
 
     // 지도: 시작/끝 마커 + 파란 경로
     final tr = _trace!;
     final first = tr.pts.first;
     final second = tr.pts.length > 1 ? tr.pts[1] : first;
+
+    // 전체 경로 길이 (csv 기반)
+    _totalKm = _computeRouteLengthKm(tr.pts);
+    // 시작할 때는 남은 거리 = 전체 거리
+    _remainingKm = _totalKm;
 
     _markers
       ..clear()
@@ -249,17 +307,24 @@ class _MapPageState extends State<MapPage> {
         width: 6,
       ));
 
+    // 1. Completer 및 상태 설정
+    _mapReady = Completer<void>();
+    _running = true;
+    setState(() {});
+
+    // 2. 맵 준비 대기
+    await _mapReady!.future;
+
+    // 3. 변수 설정
     final heading0 = _bearingDeg(first, second);
     _currentPos = first;
     _currentKmh = 0.0;
     _startTime = DateTime.now();
     _elapsedTime = '00:00';
 
-    _running = true;
-    _mapReady = Completer<void>();
-    setState(() {});
+    _followCar = true;
+    _lastBearing = heading0;
 
-    await _mapReady!.future;
     await _updateCarAndCamera(first, heading0);
 
     // SSE 시작
@@ -300,6 +365,8 @@ class _MapPageState extends State<MapPage> {
           final dc = p['decel_class'] as int;
           final warn = p['warn'] == 1;
 
+          _hudMaxSpd = maxSpd; // HUD에 쓸 제한 속도 갱신
+
           // 경과 시간
           final elapsedDuration = DateTime.now().difference(_startTime!);
           final currentRunTimeMs = elapsedDuration.inMilliseconds;
@@ -310,6 +377,11 @@ class _MapPageState extends State<MapPage> {
           _currentPos = next;
           _currentKmh = spd;
           await _updateCarAndCamera(next, bearing);
+
+          //  현재 위치 기준 남은 거리 (start-end 직선 대신 현재 위치-end 직선)
+          if (_trace != null && _currentPos != null) {
+            _remainingKm = _computeRemainingKm(_trace!.pts, _currentPos!);
+          }
 
           // TAS 배너 (서버 warn + dc=1/2일 때만)
           final showTas = warn && (dc == 1 || dc == 2);
@@ -324,14 +396,9 @@ class _MapPageState extends State<MapPage> {
           }
 
           _tasSeverity = showTas ? dc : null;
-          _tasTitle = showTas ? (dc == 2 ? '위  험' : '주  의') : null;
+          _tasTitle = showTas ? (dc == 2 ? '⚠ 도로 결빙 ⚠\n위험 구간입니다' : '⚠ 도로 젖음 ⚠\n주의 구간입니다') : null;
           final recSafe = rec.clamp(0.0, maxSpd);
-          _tasSub = showTas ? '${recSafe.round()} km/h 이하로 서행' : null;
-
-          // HUD 숫자
-          _hudMaxSpd = maxSpd;
-          _hudRec = rec;
-          _hudDecelClass = dc;
+          _tasSub = showTas ? '${recSafe.round()}km/h 이하로 서행하세요' : null;
 
           // 경과 시간
           if (_startTime != null) {
@@ -378,29 +445,6 @@ class _MapPageState extends State<MapPage> {
     try { await _sse.stop(); } catch (_) {}
   }
 
-  void _pause() {
-    _stopSse();
-    _startTime = null; // 시간 측정 중단
-    setState(() {});
-  }
-
-  Future<void> _restart() async {
-    await _stopSse();
-    _currentPos = null;
-    _currentKmh = 0.0;
-    _elapsedTime = '00:00';
-    _startTime = null;
-
-    _tasSeverity = null;
-    _tasTitle = null;
-    _tasSub = null;
-    _hudMaxSpd = null;
-    _hudRec = null;
-    _hudDecelClass = null;
-
-    await _start();
-  }
-
   Future<void> _resetAll() async {
     await _stopSse();
 
@@ -414,22 +458,37 @@ class _MapPageState extends State<MapPage> {
     _currentKmh = 0.0;
     _elapsedTime = '00:00';
     _startTime = null;
+    _totalKm = null;
+    _remainingKm = null;
 
     _tasSeverity = null;
     _tasTitle = null;
     _tasSub = null;
-    _hudMaxSpd = null;
-    _hudRec = null;
-    _hudDecelClass = null;
+
+    _followCar = true;
 
     setState(() {});
+  }
+
+  void _onReturnPressed() {
+    if (_currentPos == null) return;
+    if (!_mapReadyOk) return;
+
+    setState(() {
+      _followCar = true;
+    });
+
+    // 마지막 베어링 방향으로 현재 차량 위치로 카메라 복귀
+    _applyNavCamera(_currentPos!, _lastBearing);
   }
 
   @override
   void dispose() {
     _stopSse();
+    // _map.dispose();
     super.dispose();
   }
+
 
   // ─────────────────────────────────────────────────────────
   // UI
@@ -446,18 +505,37 @@ class _MapPageState extends State<MapPage> {
 
     // 1) 시나리오 선택
     if (_selected == null) {
-      final order = [DriveScenario.rain, DriveScenario.snow];
+      final order = [
+        DriveScenario.sunny,
+        DriveScenario.rain,
+        DriveScenario.snow
+      ];
       return Scaffold(
-        appBar: AppBar(title: const Text('TAS')),
+        appBar: AppBar(
+            titleSpacing: 0,
+            title: const Text('TAS Navigator')
+        ),
         drawer: _buildDrawer(context),
         body: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: ListView.separated(
             itemCount: order.length,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (_, idx) {
               final s = order[idx];
-              final slot = _mgr.scenarios[s]!;
+              final slot = _mgr.scenarios[s];
+              debugPrint('Scenario check: $s, slot is null: ${slot == null}');
+
+              if (slot == null) {
+                return const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text('Fatal Error: Scenario data missing.',
+                          style: TextStyle(color: Colors.white)
+                      ),
+                    ),
+                );
+              }
 
               // 리스트 카드
               return _scenarioListCard(
@@ -479,7 +557,6 @@ class _MapPageState extends State<MapPage> {
     final tr = slot.trace!;
     if (!_running) {
       return Scaffold(
-        // appBar: AppBar(title: Text('TAS · ${_scenarioTitle(_selected)}')),
         appBar: AppBar(title: const Text('TAS Navigator')),
         drawer: _buildDrawer(context),
         body: Padding(
@@ -520,7 +597,7 @@ class _MapPageState extends State<MapPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('TAS Navigator'),
-        actions: [IconButton(onPressed: _resetAll, icon: const Icon(Icons.refresh))],
+        actions: [IconButton(onPressed: _resetAll, icon: const Icon(Icons.output))],
       ),
       body: Stack(
         children: [
@@ -536,6 +613,26 @@ class _MapPageState extends State<MapPage> {
             rotateGesturesEnabled: true,
             tiltGesturesEnabled: true,
             compassEnabled: false,
+
+            // 지도 드래그하면 follow 해제
+            onCameraMoveStarted: () {
+              final nowMs = DateTime.now().millisecondsSinceEpoch;
+              final diff = nowMs - _lastAppCameraMoveMs;
+
+              // animateCamera 직후(예: 400ms 이내)에 발생한 moveStarted는
+              // 앱이 움직인 걸로 보고 무시
+              if (diff >= 0 && diff < 400) {
+                return;
+              }
+
+              // 그 이후에 발생한 moveStarted는 사용자가 드래그했다고 보고 follow 해제
+              if (_running && _followCar && _currentPos != null) {
+                setState(() {
+                  _followCar = false;
+                });
+              }
+            },
+
           ),
 
           // 상단 TAS 경고 배너
@@ -562,41 +659,68 @@ class _MapPageState extends State<MapPage> {
             child: hud.SpeedHud(kmh: _currentKmh),
           ),
 
-          // // 좌상단 아래 제한/추천/상태 HUD (SSE 수치 기반)
-          // if (_hudMaxSpd != null && _hudRec != null && _hudDecelClass != null)
-          //   Positioned(
-          //     top: 100,
-          //     left: 30,
-          //     child: _buildTasStatusHudNumbers(
-          //       maxSpd: _hudMaxSpd!,
-          //       rec: _hudRec!,
-          //       decelClass: _hudDecelClass!,
-          //     ),
-          //   ),
-
           // 좌하단 좌표/경과 시간 HUD
           Positioned(
-            left: 12,
-            bottom: 20,
-            child: hud.CoordTimeHud(
-              pos: _car != null
-                  ? card.LatLngLite(_car!.position.latitude, _car!.position.longitude)
-                  : null,
-              elapsed: _elapsedTime,
+            left: 25,
+            bottom: 70,
+            child: hud.SpeedLimitHud(
+              maxSpd: _hudMaxSpd?.toInt(),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-        child: Row(
-          children: [
-            Expanded(child: ElevatedButton(onPressed: _pause, child: const Text('일시정지'))),
-            const SizedBox(width: 8),
-            Expanded(child: ElevatedButton(onPressed: _restart, child: const Text('재시작'))),
-            const SizedBox(width: 8),
-            Expanded(child: ElevatedButton(onPressed: _resetAll, child: const Text('주행 종료'))),
-          ],
+      bottomNavigationBar: MediaQuery.removePadding(
+        context: context,
+        removeBottom: true,   // ← 하단 SafeArea 제거
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
+          child: SizedBox(
+            height: 60,
+            child: Row(
+              children: [
+                // [1] 마커 포커싱
+                Expanded(
+                  flex: 1,
+                  child: InkWell(
+                    onTap: _onReturnPressed,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        border: Border.all(color: Colors.black),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          color: Colors.white,
+                          Icons.my_location,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // [2] 주행 시간
+                Expanded(
+                  flex: 2,
+                  child: _BottomInfoBox(
+                    title: '주행 시간',
+                    value: _elapsedTime,
+                  ),
+                ),
+
+                // [3] 남은 거리
+                Expanded(
+                  flex: 2,
+                  child: _BottomInfoBox(
+                    title: '남은 거리',
+                    value: _remainingKm != null
+                        ? '${_remainingKm!.toStringAsFixed(1)} km'
+                        : '-- km',
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -618,7 +742,7 @@ class _MapPageState extends State<MapPage> {
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 0,
+      elevation: 1,
       surfaceTintColor: Colors.transparent,
       child: InkWell(
         onTap: loading || hasError ? null : onTap,
@@ -669,17 +793,6 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  // String _scenarioTitle(DriveScenario? s) {
-  //   switch (s) {
-  //     case DriveScenario.rain:
-  //       return '비 오는 날';
-  //     case DriveScenario.snow:
-  //       return '눈 오는 날';
-  //     default:
-  //       return '주행 구간';
-  //   }
-  // }
-
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
       child: SafeArea(
@@ -709,40 +822,65 @@ class _MapPageState extends State<MapPage> {
       ),
     );
   }
+}
 
-  // // 개발시 제한, 추천 속도 확인용
-  // // 숫자만으로 그리는 간단 TAS 상태 HUD
-  // Widget _buildTasStatusHudNumbers({
-  //   required double maxSpd,
-  //   required double rec,
-  //   required int decelClass,
-  // }) {
-  //   final Color bg = switch (decelClass) {
-  //     2 => Colors.red.shade700,
-  //     1 => Colors.orange.shade700,
-  //     _ => Colors.green.shade700,
-  //   };
-  //
-  //   return Container(
-  //     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-  //     decoration: BoxDecoration(
-  //       color: bg,
-  //       borderRadius: BorderRadius.circular(4),
-  //       boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4)],
-  //     ),
-  //     child: Column(
-  //       crossAxisAlignment: CrossAxisAlignment.start,
-  //       children: [
-  //         Text('제한 속도: ${maxSpd.toStringAsFixed(0)} km/h',
-  //             style: const TextStyle(color: Colors.white, fontSize: 14)),
-  //         Text('추천 속도: ${rec.toStringAsFixed(0)} km/h',
-  //             style: const TextStyle(color: Colors.white, fontSize: 14)),
-  //         Text(
-  //           decelClass == 2 ? '🚨 위험' : (decelClass == 1 ? '⚠️ 주의' : '✅ 정상 주행'),
-  //           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
+class _BottomInfoBox extends StatelessWidget {
+  final String title;
+  final String value;
+  final VoidCallback? onTap;
+  final bool emphasize;
+
+  const _BottomInfoBox({
+    super.key,
+    required this.title,
+    required this.value,
+    this.onTap,
+    this.emphasize = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (title.isNotEmpty) ...[
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            color: Colors.white,
+            fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+
+    final inner = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: content,
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black87,
+        border: Border.all(color: Colors.black),
+      ),
+      child: onTap == null
+          ? inner
+          : InkWell(
+        onTap: onTap,
+        child: inner,
+      ),
+    );
+  }
 }

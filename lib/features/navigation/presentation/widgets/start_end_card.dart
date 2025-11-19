@@ -12,10 +12,10 @@ class StartEndCard extends StatelessWidget {
   final String endAddr;
   final LatLngLite end;
 
-  /// ✅ 추가: 카드를 탭했을 때 실행할 콜백 (미리보기 열기 등)
+  /// 카드를 탭했을 때 실행할 콜백 (미리보기 열기 등)
   final VoidCallback? onTap;
 
-  /// ✅ 추가(옵션): 하단에 "탭하여 미리보기"
+  /// 하단에 "탭하여 미리보기"
   final bool showTapHint;
 
   const StartEndCard({
@@ -55,13 +55,14 @@ class StartEndCard extends StatelessWidget {
       ),
     );
 
-    // ✅ onTap이 있으면 InkWell 랩핑해서 카드 전체가 탭을 받도록
+    // onTap이 있으면 InkWell 랩핑해서 카드 전체가 탭을 받도록
     final body = onTap == null
         ? content
         : InkWell(onTap: onTap, child: content);
 
     return Card(
       elevation: 0,
+      color: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),

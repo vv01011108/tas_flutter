@@ -1,18 +1,19 @@
-/* 배너 UI - 둥근 모서리 정삼각형 경고 표지판 + 에셋 아이콘 */
+/* 배너 UI - 겹치는 라운드 직사각형 경고 배너 */
+import 'dart:async'; // ← 추가
 import 'package:flutter/material.dart';
 import '../../shared/config.dart';
 import '../domain/alert_engine.dart';
 
-class AlertBanner extends StatelessWidget {
+class AlertBanner extends StatefulWidget {
   final bool visible;
-  final AlertNode? alert; // 기존 경고(Fallback) — 이제는 표시 안 함
+  final AlertNode? alert; // (현재는 사용 안 함)
   final double curKmh;
   final int playMs;
   final int firstEnterPlayMs;
 
-  final String? tasTitle;   // "도로 주의 구간" / "위험 구간" 등
-  final String? tasSub;     // "25 km/h 이하로 서행" 등
-  final int? severity;      // 1=주의(오렌지), 2=위험(레드) — 이것만 표시
+  final String? tasTitle;   // "도로 젖음\n주의 구간입니다" 등
+  final String? tasSub;     // "40km/h 이하로 서행하세요" 등
+  final int? severity;      // 1=주의(오렌지), 2=위험(레드)
 
   const AlertBanner({
     super.key,
@@ -26,93 +27,186 @@ class AlertBanner extends StatelessWidget {
     this.severity,
   });
 
-  bool get _isActive => severity == 1 || severity == 2;
+  @override
+  State<AlertBanner> createState() => _AlertBannerState();
+}
+
+class _AlertBannerState extends State<AlertBanner> {
+  bool _flashOn = true;
+  Timer? _timer;
+
+  // decel_class 1 or 2일 때만
+  bool get _isActive => widget.severity == 1 || widget.severity == 2;
+
+  @override
+  void initState() {
+    super.initState();
+    // alertFlashMs 주기로 깜빡임 토글
+    _timer = Timer.periodic(
+      const Duration(milliseconds: AppConfig.alertFlashMs),
+          (_) {
+        if (!mounted) return;
+        // 경고가 실제로 표시되는 상태에서만 깜빡임
+        if (!widget.visible || !_isActive || widget.tasTitle == null) return;
+        setState(() {
+          _flashOn = !_flashOn;
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    // severity가 1/2가 아니면 아예 표시하지 않음 (기본/검은 테두리 배너 차단)
-    if (!visible || !_isActive || tasTitle == null) {
+    // severity가 1/2가 아니면 표시 안 함
+    if (!widget.visible || !_isActive || widget.tasTitle == null) {
       return const SizedBox.shrink();
     }
 
-    final flashing = ((playMs - firstEnterPlayMs) ~/ AppConfig.alertFlashMs) % 2 == 0;
+    // Timer로 토글되는 플래그 사용
+    final bool flashing = _flashOn;
+    final bool danger = widget.severity == 2;
 
-    // 테두리/아이콘 색상
-    final bool danger = severity == 2;
-    final Color borderColor = danger ? Colors.red : Colors.deepOrangeAccent;
-    // final Color iconColor   = borderColor;
+    // 기본 색 (완전 불투명)
+    final Color baseOuterColor =
+    danger ? Colors.deepOrangeAccent : const Color(0xFFfe9333);
+    final Color baseInnerColor =
+    danger ? Colors.deepOrangeAccent : const Color(0xFFfe9333);
+    const Color baseBorderColor = Colors.white;
+
+    const Color baseTextColor = Colors.black;
+    const Color baseTextDangerColor = Color(0xFFff0000);
+
+    // '전체 알파'만 컨트롤
+    final double alpha = flashing ? 0.8 : 0.4;
+
+    final Color outerColor = baseOuterColor.withOpacity(alpha);
+    final Color innerColor = baseInnerColor.withOpacity(alpha);
+    final Color borderColor = baseBorderColor.withOpacity(alpha);
+
+    final Color textColor = baseTextColor.withOpacity(alpha);
+    final Color textDangerColor = baseTextDangerColor.withOpacity(alpha);
 
     return AnimatedSlide(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
-      offset: visible ? Offset.zero : const Offset(0, -1),
+      offset: widget.visible ? Offset.zero : const Offset(0, -1),
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 100),
-        opacity: visible ? 1 : 0,
+        opacity: widget.visible ? 1 : 0,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 20, 12, 0),
-          child: _RoundedTriangleSign(
-            flashOn: flashing,
-            borderWidth: 15,
-            cornerRadius: 18,
-            borderColor: borderColor,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                
-                // 경고판 안 텍스트 위치 조정
-                const SizedBox(height: 80),
-                Icon(
-                  danger ? Icons.dangerous : Icons.warning_amber_rounded,
-                  size: 44,
-                  color: borderColor,
+          padding: const EdgeInsets.fromLTRB(12, 150, 12, 0),
+          child: Container(
+            // 제일 바깥 라운드 직사각형
+            width: 300,
+            height: 138,
+            decoration: BoxDecoration(
+              color: outerColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              // 안쪽 라운드 직사각형 (하얀 테두리)
+              margin: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: innerColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderColor, width: 6),
+              ),
+              child: Padding(
+                // 안쪽 여백 (텍스트/아이콘 공간)
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
                 ),
-                const SizedBox(height: 8),
-                Stack(
-                  alignment: Alignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-
-                    // 1. 아래 텍스트: 인위적으로 굵기를 더하는 Stroke 역할
-                    Text(
-                      tasTitle!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-
-                        // 검은색 테두리/스트로크를 아주 얇게 적용하여 굵기를 보강
-                        foreground: Paint()
-                          ..style = PaintingStyle.stroke
-                          ..strokeWidth = 0.9 // 굵기 보강용 얇은 스트로크 (원하는 값으로 조절)
-                          ..color = Colors.black,
-                      ),
+                    // 첫 줄: "⚠ 도로 젖음 ⚠"
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: 4),
+                        Text(
+                          widget.tasTitle!.split('\n').first,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                     ),
 
-                    // 2. 위 텍스트: 내부 채우기 역할 (w900 굵기 유지)
-                    Text(
-                      tasTitle!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black,
+                    const SizedBox(height: 0),
+
+                    // 두 번째 줄: "주의 구간입니다"
+                    if (widget.tasTitle!.contains('\n')) ...[
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: widget.tasTitle!
+                                  .split('\n')
+                                  .last
+                                  .replaceAll('입니다', ''),
+                              style: TextStyle(
+                                fontSize: 23,
+                                fontWeight: FontWeight.w900,
+                                color: textDangerColor,
+                              ),
+                            ),
+                            TextSpan(
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: textColor,
+                              ),
+                              text: '입니다',
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
+
+                    // 세 번째 줄: "40km/h 이하로 서행하세요"
+                    if (widget.tasSub != null) ...[
+                      const SizedBox(height: 0),
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: _extractNumber(widget.tasSub!),
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                color: textColor,
+                                height: 1.0,
+                              ),
+                            ),
+                            TextSpan(
+                              text: _extractRest(widget.tasSub!),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: textColor,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                if (tasSub != null) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    tasSub!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         ),
@@ -121,111 +215,13 @@ class AlertBanner extends StatelessWidget {
   }
 }
 
-class _RoundedTriangleSign extends StatelessWidget {
-  final Widget child;
-  final bool flashOn;
-  final double borderWidth;
-  final double cornerRadius;
-  final Color borderColor;
-
-  const _RoundedTriangleSign({
-    required this.child,
-    required this.flashOn,
-    required this.borderWidth,
-    required this.cornerRadius,
-    this.borderColor = Colors.black,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final Color signColor = flashOn ? Colors.white : Colors.amber.shade200;
-    return CustomPaint(
-      painter: _RoundedTrianglePainter(
-        color: signColor,
-        borderColor: borderColor,
-        borderWidth: borderWidth,
-        cornerRadius: cornerRadius,
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          // 경고판 패딩
-          horizontal: 24 + borderWidth,
-          vertical: 20 + borderWidth / 2,
-        ),
-        child: child,
-      ),
-    );
-  }
+String _extractNumber(String text) {
+  final reg = RegExp(r'\d+'); // 숫자만 추출
+  final match = reg.firstMatch(text);
+  return match?.group(0) ?? '';
 }
 
-class _RoundedTrianglePainter extends CustomPainter {
-  final Color color;
-  final Color borderColor;
-  final double borderWidth;
-  final double cornerRadius;
-
-  _RoundedTrianglePainter({
-    required this.color,
-    required this.borderColor,
-    required this.borderWidth,
-    required this.cornerRadius,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // 1. 삼각형의 높이를 고정 (예: 캔버스 높이 전체를 사용한다고 가정)
-    final triangleHeight = h;
-
-    // 2. 이동시킬 거리를 정의
-    final offset_y = 60.0; // 원하는 만큼 아래로 이동 (50.0 예시)
-
-    // 3. 꼭짓점 좌표를 재정의
-    // - top: (캔버스 중앙) + offset_y
-    final top   = Offset(w / 2, 0 + offset_y);
-
-    // - left/right: (top.y + 고정된 삼각형 높이)로 계산하여 높이를 유지
-    final bottom_y = -60 + triangleHeight + offset_y;
-
-    final left  = Offset(0, bottom_y);
-    final right = Offset(w, bottom_y);
-
-    // 하지만, 이 값이 캔버스 높이(h)를 넘으면 안 됨
-    // 캔버스 안에서 삼각형 크기를 줄여야 함 (예시: 삼각형 높이를 캔버스 높이의 80%로 가정)
-
-    // final fixedTriangleHeight = h * 0.8; // 삼각형 높이를 캔버스 높이의 80%로 고정
-    // final top_y = 0 + offset_y;
-    // final bottom_y_fixed = top_y + fixedTriangleHeight;
-    //
-    // // 최종 수정된 좌표
-    // final final_top = Offset(w / 2, top_y);
-    // final final_left = Offset(0, bottom_y_fixed);
-    // final final_right = Offset(w, bottom_y_fixed);
-
-    final path = Path()
-      ..moveTo(top.dx, top.dy)
-      ..lineTo(right.dx, right.dy)
-      ..lineTo(left.dx, left.dy)
-      ..close();
-
-    final fill = Paint()..color = color;
-    canvas.drawPath(path, fill);
-
-    final strokePaint = Paint()
-      ..color = borderColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = borderWidth
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(path, strokePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _RoundedTrianglePainter old) {
-    return old.color != color ||
-        old.borderColor != borderColor ||
-        old.borderWidth != borderWidth ||
-        old.cornerRadius != cornerRadius;
-  }
+String _extractRest(String text) {
+  final reg = RegExp(r'\d+');
+  return text.replaceFirst(reg, '');
 }

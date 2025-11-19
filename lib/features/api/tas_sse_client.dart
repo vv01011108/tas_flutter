@@ -33,7 +33,9 @@ class TasSseClient {
       ..fields['model_path'] = modelPath
       ..fields['fps'] = fps.toString()
       ..fields['img_size'] = imgSize.toString()
-      ..fields['interval_sec'] = intervalSec.toString();
+      ..fields['interval_sec'] = intervalSec.toString()
+      ..fields['backbone'] = 'convnext_tiny'
+      ..fields['batch_size'] = '1';
 
     final res = await _client!.send(req);
     if (res.statusCode != 200) {
@@ -54,6 +56,7 @@ class TasSseClient {
           } else if (obj['done'] == true) {
             onEnd(obj);
           } else if (obj['row_index'] != null) {
+            print("TICK EVENT: $obj");
             onTick(obj);
           }
         } catch (e) {

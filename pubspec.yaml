@@ -66,9 +66,11 @@ flutter:
   assets:
     - assets/rain_trace.csv
     - assets/snow_trace.csv
+    - assets/sunny_trace.csv
     - assets/icons/car.png
     - assets/icons/rain.png
     - assets/icons/snow.png
+    - assets/icons/ellipse.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

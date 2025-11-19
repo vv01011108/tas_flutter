@@ -8,7 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../navigation/domain/trace_models.dart';
 import '../../shared/config.dart';
 
-enum DriveScenario { rain, snow }
+enum DriveScenario { sunny, rain, snow }
 
 class ScenarioData {
   ScenarioData(this.scenario);
@@ -24,12 +24,21 @@ class ScenarioData {
 class ScenarioManager {
   // 초기값: loading=false (preload가 실행되도록)
   final Map<DriveScenario, ScenarioData> scenarios = {
+    DriveScenario.sunny: ScenarioData(DriveScenario.sunny),
     DriveScenario.rain: ScenarioData(DriveScenario.rain),
     DriveScenario.snow: ScenarioData(DriveScenario.snow),
   };
 
-  String csvFor(DriveScenario s) =>
-      s == DriveScenario.rain ? AppConfig.kTraceCsvRain! : AppConfig.kTraceCsvSnow!;
+  String csvFor(DriveScenario s) {
+    switch (s) {
+      case DriveScenario.sunny:
+        return AppConfig.kTraceCsvSunny!;
+      case DriveScenario.rain:
+        return AppConfig.kTraceCsvRain!;
+      case DriveScenario.snow:
+        return AppConfig.kTraceCsvSnow!;
+    }
+  }
 
   /// CSV를 asset에서 읽어 TraceData로 만든 다음, 주소(있다면) 세팅
   Future<void> preload(

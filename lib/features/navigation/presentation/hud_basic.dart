@@ -1,9 +1,7 @@
 /* 속도/시간 HUD 위젯 */
 import 'package:flutter/material.dart';
-// LatLngLite를 start_end_card.dart에서 가져옵니다.
-import '../../navigation/presentation/widgets/start_end_card.dart';
 
-/// 공용 HUD 박스(네 원본 스타일)
+/// 공용 HUD 박스(원본 스타일)
 Widget hudBox({required Widget child}) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -18,7 +16,7 @@ Widget hudBox({required Widget child}) {
   );
 }
 
-/* ───────── 추가: HUD 전용 재사용 위젯 두 개 ───────── */
+/* ───────── HUD 전용 재사용 위젯 두 개 ───────── */
 
 /// 스피드만 보여주는 HUD (컴파스 바로 아래 배치용)
 class SpeedHud extends StatelessWidget {
@@ -34,7 +32,7 @@ class SpeedHud extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Stack( // 테두리와 채우기를 위해 Stack으로 감싸 두 개의 Text를 겹칩니다.
+        Stack( // 테두리와 채우기를 위해 Stack으로 감싸 두 개의 Text를 겹침
           alignment: Alignment.center,
           children: [
             // 1. 아래 텍스트: 테두리(Stroke) 역할
@@ -46,18 +44,18 @@ class SpeedHud extends StatelessWidget {
                 // 테두리 스타일 정의 (빨간색)
                 foreground: Paint()
                   ..style = PaintingStyle.stroke // 스타일을 '테두리'로 설정
-                  ..strokeWidth = 6.0           // 테두리 두께 (2.0에서 4.0으로 늘려 테두리가 더 잘 보이게 했습니다.)
+                  ..strokeWidth = 6.0           // 테두리 두께
                   ..color = Colors.white,         // 테두리 색상
               ),
             ),
 
-            // 2. 위 텍스트: 채우기(Fill) 역할
+            // 2. 글자 내부 채우기
             Text(
               '${kmh.toInt()}',
               style: const TextStyle(
                 fontSize: fontSize,
                 fontWeight: fontWeight,
-                color: Colors.black,           // 글자 내부 채우기 색상 (흰색으로 설정)
+                color: Colors.black,
               ),
             ),
           ],
@@ -67,36 +65,61 @@ class SpeedHud extends StatelessWidget {
   }
 }
 
-/// 좌표 + 주행시간을 함께 보여주는 HUD (좌하단 배치용)
-class CoordTimeHud extends StatelessWidget {
-  final LatLngLite? pos; // LatLngLite 사용
-  final String elapsed; // "mm:ss" 형태를 넘겨주세요.
+// 제한 속도 표지 HUD (좌하단 배치용)
+class SpeedLimitHud extends StatelessWidget {
+  final int? maxSpd; // null이면 '--'로 표시
 
-  const CoordTimeHud({
-    super.key,
-    required this.pos,
-    required this.elapsed,
-  });
-
+  const SpeedLimitHud({super.key, this.maxSpd});
+  
   @override
   Widget build(BuildContext context) {
-    final latStr = pos == null ? '—' : pos!.latitude.toStringAsFixed(6);
-    final lngStr = pos == null ? '—' : pos!.longitude.toStringAsFixed(6);
+    final text = maxSpd != null ? '$maxSpd' : '--';
 
-    return hudBox(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.place, size: 16, color: Colors.white70),
-          const SizedBox(width: 4),
-          Text('lat $latStr, lng $lngStr', style: const TextStyle(color: Colors.white70)),
+    return Stack(
+      clipBehavior: Clip.none, // 겹치기 허용
+      alignment: Alignment.center,
+      children: [
+        // 제한 속도 원판
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white,
+            border: Border.all(color: Colors.red, width: 6),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 25,
+              fontWeight: FontWeight.w700,
+              color: Colors.black,
+            ),
+          ),
+        ),
 
-          const SizedBox(width: 10),
-          const Icon(Icons.timer, size: 16, color: Colors.white70),
-          const SizedBox(width: 4),
-          Text(elapsed, style: const TextStyle(color: Colors.white70)),
-        ],
-      ),
+        // 아래 "제한 속도" 텍스트 박스
+        Positioned(
+          bottom: -15, // 겹치는 정도
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(4),
+            ),
+
+            child: const Text(
+              '제한 속도',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

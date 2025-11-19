@@ -11,7 +11,7 @@ class KrAddressService {
           '?latlng=${p.latitude},${p.longitude}'
           '&language=ko'      // 한국어
           '&region=KR'        // 한국 지역 편향
-          '&result_type=street_address|premise|point_of_interest'
+          '&result_type=street_address|route|political'
           '&key=${AppConfig.googleGeocodeKey}',
     );
 

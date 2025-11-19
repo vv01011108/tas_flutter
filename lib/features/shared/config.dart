@@ -1,7 +1,8 @@
 /* 상수 - 브리지 ms, 임계값 */
 class AppConfig {
   // CSV 자원 경로
-  // [수정]: TAS 시나리오 파일만 유지
+  // TAS 시나리오 파일
+  static const String? kTraceCsvSunny = 'assets/sunny_trace.csv';
   static const String? kTraceCsvRain = 'assets/rain_trace.csv';
   static const String? kTraceCsvSnow = 'assets/snow_trace.csv';
 
@@ -15,8 +16,7 @@ class AppConfig {
   static const int gapMs = 60000;   // 1분 이상이면 갭으로 간주
   static const int bridgeMs = 4000; // 화면상 4초로 연결
 
-  // 🗑️ [삭제]: AlertEngine에서 사용하지 않는 alertEnterM/ExitM, alertLingerMs 삭제
-  static const int alertFlashMs   = 400; // AlertBanner에서 사용되므로 유지
+  static const int alertFlashMs = 800; // AlertBanner에서 사용되므로 유지
 
   // 카메라(네비게이션) 기본
   static const double camZoom = 18.5;
