@@ -38,8 +38,8 @@ class ScenarioListCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: loading ? const _Loading() : _Body(
-            startAddr: startAddr ?? '주소 조회 실패',
-            endAddr: endAddr ?? '주소 조회 실패',
+            startAddr: startAddr ?? 'Address lookup failed',
+            endAddr: endAddr ?? 'Address lookup failed',
             trace: trace!,
           ),
         ),
@@ -57,7 +57,7 @@ class _Loading extends StatelessWidget {
       SizedBox(height: 4),
       LinearProgressIndicator(minHeight: 6),
       SizedBox(height: 6),
-      Text('경로 불러오는 중...', style: TextStyle(fontSize: 12, color: Colors.black54)),
+      Text('Loading route...', style: TextStyle(fontSize: 12, color: Colors.black54)),
     ],
   );
 }

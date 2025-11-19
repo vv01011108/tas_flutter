@@ -67,8 +67,8 @@ class ScenarioManager {
       final endName = await _safeAddr(krAddr, trace.end);
 
       slot.trace = trace;
-      slot.startAddrKr = startName ?? trace.startAddr ?? '출발지';
-      slot.endAddrKr = endName ?? trace.endAddr ?? '도착지';
+      slot.startAddrKr = startName ?? trace.startAddr ?? 'Start';
+      slot.endAddrKr = endName ?? trace.endAddr ?? 'Destination';
     } catch (e, st) {
       debugPrint('[preload] $s 실패: $e\n$st');
       slot.trace = null; // UI에서 실패 표시

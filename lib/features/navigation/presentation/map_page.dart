@@ -396,9 +396,10 @@ class _MapPageState extends State<MapPage> {
           }
 
           _tasSeverity = showTas ? dc : null;
-          _tasTitle = showTas ? (dc == 2 ? '⚠ 도로 결빙 ⚠\n위험 구간입니다' : '⚠ 도로 젖음 ⚠\n주의 구간입니다') : null;
+          _tasTitle = showTas
+              ?(dc == 2 ? '⚠ Icy Road ⚠\nHigh-risk section' : '⚠ Wet Road ⚠\nCaution section') : null;
           final recSafe = rec.clamp(0.0, maxSpd);
-          _tasSub = showTas ? '${recSafe.round()}km/h 이하로 서행하세요' : null;
+          _tasSub = showTas ? 'Slow down to ${recSafe.round()} km/h or less' : null;
 
           // 경과 시간
           if (_startTime != null) {
@@ -413,7 +414,7 @@ class _MapPageState extends State<MapPage> {
           await _sse.stop();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('모의 주행 완료(SSE 종료)')),
+              const SnackBar(content: Text('Simulation finished (SSE closed)')),
             );
             setState(() {});
           }
@@ -423,7 +424,7 @@ class _MapPageState extends State<MapPage> {
           await _sse.stop();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('SSE 오류: $e'), backgroundColor: Colors.red),
+              SnackBar(content: Text('SSE error: $e'), backgroundColor: Colors.red),
             );
             setState(() {});
           }
@@ -434,7 +435,7 @@ class _MapPageState extends State<MapPage> {
       await _sse.stop();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('SSE 시작 실패: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Failed to start SSE: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -539,7 +540,7 @@ class _MapPageState extends State<MapPage> {
 
               // 리스트 카드
               return _scenarioListCard(
-                title: slot.startAddrKr ?? '주행 경로',
+                title: slot.startAddrKr ?? 'Route',
                 startAddr: slot.startAddrKr,
                 endAddr: slot.endAddrKr,
                 trace: slot.trace,
@@ -577,7 +578,7 @@ class _MapPageState extends State<MapPage> {
                   if (_trace == null || _trace!.pts.isEmpty) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('경로 데이터가 비어 있습니다. 시나리오 파일을 확인하세요.')),
+                        const SnackBar(content: Text('Scenario file paths are not configured.')),
                       );
                     }
                     return;
@@ -585,7 +586,7 @@ class _MapPageState extends State<MapPage> {
                   await _start();
                 },
                 icon: const Icon(Icons.play_arrow),
-                label: const Text('안내 시작'),
+                label: const Text('Start Guidance'),
               ),
             ],
           ),
@@ -703,7 +704,7 @@ class _MapPageState extends State<MapPage> {
                 Expanded(
                   flex: 2,
                   child: _BottomInfoBox(
-                    title: '주행 시간',
+                    title: 'Elapsed time',
                     value: _elapsedTime,
                   ),
                 ),
@@ -712,7 +713,7 @@ class _MapPageState extends State<MapPage> {
                 Expanded(
                   flex: 2,
                   child: _BottomInfoBox(
-                    title: '남은 거리',
+                    title: 'Remaining distance',
                     value: _remainingKm != null
                         ? '${_remainingKm!.toStringAsFixed(1)} km'
                         : '-- km',
@@ -756,12 +757,15 @@ class _MapPageState extends State<MapPage> {
               if (loading)
                 const LinearProgressIndicator(minHeight: 6)
               else if (hasError)
-                const Text('❌ 경로 로드 실패 (파일 또는 형식 오류)', style: TextStyle(color: Colors.red))
+                const Text(
+                  '❌ Failed to load route (file or format error)',
+                  style: TextStyle(color: Colors.red),
+                )
               else
                 card.StartEndCard(
-                  startAddr: startAddr ?? '주소 조회 실패',
+                  startAddr: startAddr ?? 'Address lookup failed',
                   start: card.LatLngLite(trace!.start.latitude, trace.start.longitude),
-                  endAddr: endAddr ?? '주소 조회 실패',
+                  endAddr: endAddr ?? 'Address lookup failed',
                   end: card.LatLngLite(trace.end.latitude, trace.end.longitude),
                 ),
             ],
@@ -779,10 +783,10 @@ class _MapPageState extends State<MapPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => PreviewSheet(
-        title: '주행 경로 미리보기',
+        title: 'Preview route',
         trace: tr,
-        startAddr: slot.startAddrKr ?? '주소 조회 중…',
-        endAddr:   slot.endAddrKr ?? '주소 조회 중…',
+        startAddr: slot.startAddrKr ?? 'Resolving address…',
+        endAddr:   slot.endAddrKr ?? 'Resolving address…',
         onStart: () async {
           Navigator.of(context).pop();
           _trace = tr;

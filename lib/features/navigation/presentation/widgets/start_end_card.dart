@@ -35,11 +35,11 @@ class StartEndCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _addrBlock('출발', startAddr, start),
+          _addrBlock('Start', startAddr, start),
           const SizedBox(height: 8),
           const Divider(thickness: 1, color: Colors.black12),
           const SizedBox(height: 8),
-          _addrBlock('도착', endAddr, end),
+          _addrBlock('Destination', endAddr, end),
 
           if (showTapHint) ...[
             const SizedBox(height: 8),
@@ -47,7 +47,7 @@ class StartEndCard extends StatelessWidget {
               children: [
                 Icon(Icons.map, size: 16, color: Colors.black54),
                 SizedBox(width: 6),
-                Text('탭하여 미리보기', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                Text('Tap to preview', style: TextStyle(fontSize: 12, color: Colors.black54)),
               ],
             ),
           ],
@@ -79,7 +79,7 @@ class StartEndCard extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(label == '출발' ? Icons.trip_origin : Icons.flag,
+            Icon(label == 'Start' ? Icons.trip_origin : Icons.flag,
                 size: 18, color: Colors.blueGrey),
             const SizedBox(width: 6),
             Text(label,
@@ -90,7 +90,7 @@ class StartEndCard extends StatelessWidget {
         Text(addr, style: const TextStyle(fontSize: 13, color: Colors.black87)),
         const SizedBox(height: 4),
         Text(
-          '위도 ${pos.latitude.toStringAsFixed(6)} | 경도 ${pos.longitude.toStringAsFixed(6)}',
+          'Lat ${pos.latitude.toStringAsFixed(6)} | Lng ${pos.longitude.toStringAsFixed(6)}',
           style: const TextStyle(fontSize: 12, color: Colors.black54),
         ),
       ],

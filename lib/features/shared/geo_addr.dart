@@ -9,7 +9,7 @@ class KrAddressService {
     final uri = Uri.parse(
       'https://maps.googleapis.com/maps/api/geocode/json'
           '?latlng=${p.latitude},${p.longitude}'
-          '&language=ko'      // 한국어
+          '&language=eng'      // 영어
           '&region=KR'        // 한국 지역 편향
           '&result_type=street_address|route|political'
           '&key=${AppConfig.googleGeocodeKey}',
@@ -37,14 +37,15 @@ class KrAddressService {
 
   static String normalizeKo(String s) => _normalizeKo(s);
 
-  /// "대한민국" 제거 + 공백 정리
   static String _normalizeKo(String s) {
     var out = s;
-    // 뒤 또는 앞의 '대한민국' 제거
-    out = out.replaceAll(RegExp(r'^\s*대한민국\s*,?\s*'), '');
-    out = out.replaceAll(RegExp(r'\s*,?\s*대한민국\s*$'), '');
-    // 쉼표 뒤 공백 정리
-    out = out.replaceAll(', ', ', ');
-    return out.trim();
+
+    // 한글 + 바로 뒤에 붙은 숫자까지 제거 (예: "산56 ")
+    out = out.replaceAll(RegExp(r'[\uac00-\ud7af]+\d*\s*'), '');
+
+    // 공백 정리
+    out = out.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    return out;
   }
 }

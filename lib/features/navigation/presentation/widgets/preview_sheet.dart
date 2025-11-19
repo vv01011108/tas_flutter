@@ -114,7 +114,7 @@ class PreviewSheet extends StatelessWidget {
                           children: [
                             Icon(Icons.directions_car_rounded, size: 22),
                             SizedBox(width: 8),
-                            Text('안내 시작', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            Text('Start Guidance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),

@@ -147,30 +147,13 @@ class _AlertBannerState extends State<AlertBanner> {
 
                     // 두 번째 줄: "주의 구간입니다"
                     if (widget.tasTitle!.contains('\n')) ...[
-                      RichText(
+                      Text(
+                        widget.tasTitle!.split('\n').last,
                         textAlign: TextAlign.center,
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: widget.tasTitle!
-                                  .split('\n')
-                                  .last
-                                  .replaceAll('입니다', ''),
-                              style: TextStyle(
-                                fontSize: 23,
-                                fontWeight: FontWeight.w900,
-                                color: textDangerColor,
-                              ),
-                            ),
-                            TextSpan(
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                color: textColor,
-                              ),
-                              text: '입니다',
-                            ),
-                          ],
+                        style: TextStyle(
+                          fontSize: 23,
+                          fontWeight: FontWeight.w900,
+                          color: textDangerColor,
                         ),
                       ),
                     ],
@@ -183,21 +166,12 @@ class _AlertBannerState extends State<AlertBanner> {
                         text: TextSpan(
                           children: [
                             TextSpan(
-                              text: _extractNumber(widget.tasSub!),
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: textColor,
-                                height: 1.0,
-                              ),
-                            ),
-                            TextSpan(
-                              text: _extractRest(widget.tasSub!),
+                              text: widget.tasSub!,
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w900,
                                 color: textColor,
-                                height: 1.5,
+                                height: 1.3,
                               ),
                             ),
                           ],

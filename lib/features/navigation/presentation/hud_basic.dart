@@ -110,7 +110,7 @@ class SpeedLimitHud extends StatelessWidget {
             ),
 
             child: const Text(
-              '제한 속도',
+              'Speed Limit',
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.white,
