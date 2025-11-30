@@ -18,6 +18,10 @@ import '../../navigation/presentation/widgets/preview_sheet.dart';
 import '../../navigation/presentation/widgets/start_end_card.dart' as card;
 import '../../navigation/presentation/hud_basic.dart' as hud;
 
+// 연동
+import 'package:http/http.dart' as http;
+
+
 /// ─────────────────────────────────────────────────────────────
 /// MapPage
 /// ─────────────────────────────────────────────────────────────
@@ -56,8 +60,23 @@ const Map<DriveScenario, ScenarioFiles> _filesByScenario = {
 
 class _MapPageState extends State<MapPage> {
   // 서버 호스트(IP[:PORT])
-  static const String _serverHost = '192.168.0.22:8000'; // 포트 8000 기본
+  //static const String _serverHost = '192.168.0.22:8000'; // 포트 8000 기본
+  static const String _serverHost = '203.237.143.226:8000'; // 우분투 포트
 
+  // 플러터 시나리오 → 서버 시나리오 이름 매핑
+  // 나중에 매핑을 바꾸고 싶을 때 여기만 고치면 됨
+  String _scenarioNameFor(DriveScenario? s) {
+    switch (s) {
+      case DriveScenario.sunny:
+        return 'none';      // 1번 시나리오
+      case DriveScenario.rain:
+        return 'caution';   // 2번 시나리오
+      case DriveScenario.snow:
+        return 'warning';   // 3번 시나리오
+      default:
+        return 'none';   // null이면 기본 none
+    }
+  }
   final ScenarioManager _mgr = ScenarioManager();
 
   late GoogleMapController _map;
@@ -267,6 +286,38 @@ class _MapPageState extends State<MapPage> {
   Future<void> _start() async {
     if (_trace == null) return;
 
+    // 0) 선택된 시나리오에 맞춰 CARLA 시나리오 시작 요청
+    final scenarioName = _scenarioNameFor(_selected);
+    try {
+      final uri = Uri.parse('http://$_serverHost/api/v1/start_scenario');
+      final res = await http.post(uri, body: {
+        'scenario': scenarioName,
+      });
+
+      debugPrint('start_scenario($scenarioName) => ${res.statusCode}');
+      if (res.statusCode != 200) {
+        // 실패해도 일단 SSE는 계속 시작하게 두고, 화면에만 알려주기
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('CARLA 시나리오 시작 실패: HTTP ${res.statusCode}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('start_scenario error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('CARLA 시나리오 서버 연결 실패: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
     // 초기 상태 클린
     _tasSeverity = null;
     _tasTitle = null;
@@ -397,7 +448,7 @@ class _MapPageState extends State<MapPage> {
 
           _tasSeverity = showTas ? dc : null;
           _tasTitle = showTas
-              ?(dc == 2 ? '⚠ Icy Road ⚠\nHigh-risk section' : '⚠ Wet Road ⚠\nCaution section') : null;
+              ?(dc == 2 ? '⚠ Icy Road ⚠\nHigh-risk Zone' : '⚠ Wet Road ⚠\nCaution Zone') : null;
           final recSafe = rec.clamp(0.0, maxSpd);
           _tasSub = showTas ? 'Slow down to ${recSafe.round()} km/h or less' : null;
 
@@ -447,6 +498,16 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _resetAll() async {
+
+    // 0) CARLA 시나리오 종료 요청 (실패해도 UI는 그냥 진행)
+    try {
+      final uri = Uri.parse('http://$_serverHost/api/v1/stop_scenario');
+      http.post(uri); // 굳이 await 안 해도 됨, fire-and-forget
+    } catch (e) {
+      debugPrint('stop_scenario error: $e');
+    }
+
+    // 1) SSE 끊기
     await _stopSse();
 
     _markers.clear();
